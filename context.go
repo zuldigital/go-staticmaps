@@ -525,14 +525,16 @@ func (m *Context) Render() (image.Image, error) {
 	if attribution == "" {
 		return croppedImg, nil
 	}
-	_, textHeight := gc.MeasureString(attribution)
-	boxHeight := textHeight + 4.0
+	textWidth, textHeight := gc.MeasureString(attribution)
+	padding := 4.0
+	boxHeight := textHeight + padding
+	boxWidth := textWidth + padding
 	gc = gg.NewContextForRGBA(croppedImg)
-	gc.SetRGBA(0.0, 0.0, 0.0, 0.5)
-	gc.DrawRectangle(0.0, float64(m.height)-boxHeight, float64(m.width), boxHeight)
-	gc.Fill()
 	gc.SetRGBA(1.0, 1.0, 1.0, 0.75)
-	gc.DrawString(attribution, 4.0, float64(m.height)-4.0)
+	gc.DrawRectangle(float64(m.width)-boxWidth, float64(m.height)-boxHeight, float64(m.width), boxHeight)
+	gc.Fill()
+	gc.SetRGBA(0.0, 0.0, 0.0, 0.5)
+	gc.DrawString(attribution, float64(m.width)-boxWidth+padding, float64(m.height)-padding)
 
 	return croppedImg, nil
 }
@@ -577,13 +579,15 @@ func (m *Context) RenderWithTransformer() (image.Image, *Transformer, error) {
 	if m.tileProvider.Attribution == "" {
 		return img, trans, nil
 	}
-	_, textHeight := gc.MeasureString(m.tileProvider.Attribution)
-	boxHeight := textHeight + 4.0
-	gc.SetRGBA(0.0, 0.0, 0.0, 0.5)
-	gc.DrawRectangle(0.0, float64(trans.pHeight)-boxHeight, float64(trans.pWidth), boxHeight)
-	gc.Fill()
+	textWidth, textHeight := gc.MeasureString(m.tileProvider.Attribution)
+	padding := 4.0
+	boxHeight := textHeight + padding
+	boxWidth := textWidth + padding
 	gc.SetRGBA(1.0, 1.0, 1.0, 0.75)
-	gc.DrawString(m.tileProvider.Attribution, 4.0, float64(m.height)-4.0)
+	gc.DrawRectangle(float64(trans.pWidth)-boxWidth, float64(trans.pHeight)-boxHeight, float64(trans.pWidth), boxHeight)
+	gc.Fill()
+	gc.SetRGBA(0.0, 0.0, 0.0, 0.5)
+	gc.DrawString(m.tileProvider.Attribution, float64(m.width)-boxWidth+padding, float64(m.height)-padding)
 
 	return img, trans, nil
 }
