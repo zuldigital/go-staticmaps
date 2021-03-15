@@ -44,6 +44,9 @@ type Context struct {
 	cache        TileCache
 
 	overrideAttribution *string
+
+	customFontFace     string
+	customFontFaceSize float64
 }
 
 // NewContext creates a new instance of Context
@@ -103,6 +106,22 @@ func (m *Context) SetBoundingBox(bbox s2.Rect) {
 // SetBackground sets the background color (used as a fallback for areas without map tiles)
 func (m *Context) SetBackground(col color.Color) {
 	m.background = col
+}
+
+// SetCustomFontFace set a path of a custom font to use to draw the texts
+func (m *Context) SetCustomFontFace(customFontFace string) {
+	m.customFontFace = customFontFace
+
+	// if didn't set the font size yet, set a default value
+	if m.customFontFaceSize == 0 {
+		m.customFontFaceSize = 12
+	}
+}
+
+// SetCustomFontFaceSize set in pixels the size of the text with the custom font
+// if you didn't set the custom font, this value will be ignored
+func (m *Context) SetCustomFontFaceSize(customFontFaceSize float64) {
+	m.customFontFaceSize = customFontFaceSize
 }
 
 // AddMarker adds a marker to the Context
@@ -525,15 +544,21 @@ func (m *Context) Render() (image.Image, error) {
 	if attribution == "" {
 		return croppedImg, nil
 	}
+
+	m.LoadCustomFontFace(gc)
+
 	textWidth, textHeight := gc.MeasureString(attribution)
 	padding := 4.0
-	boxHeight := textHeight + padding
-	boxWidth := textWidth + padding
+	boxHeight := textHeight + (padding * 2)
+	boxWidth := textWidth + (padding * 2)
 	gc = gg.NewContextForRGBA(croppedImg)
 	gc.SetRGBA(1.0, 1.0, 1.0, 0.75)
 	gc.DrawRectangle(float64(m.width)-boxWidth, float64(m.height)-boxHeight, float64(m.width), boxHeight)
 	gc.Fill()
 	gc.SetRGBA(0.0, 0.0, 0.0, 0.5)
+
+	m.LoadCustomFontFace(gc)
+
 	gc.DrawString(attribution, float64(m.width)-boxWidth+padding, float64(m.height)-padding)
 
 	return croppedImg, nil
@@ -581,15 +606,27 @@ func (m *Context) RenderWithTransformer() (image.Image, *Transformer, error) {
 	}
 	textWidth, textHeight := gc.MeasureString(m.tileProvider.Attribution)
 	padding := 4.0
-	boxHeight := textHeight + padding
-	boxWidth := textWidth + padding
+	boxHeight := textHeight + (padding * 2)
+	boxWidth := textWidth + (padding * 2)
 	gc.SetRGBA(1.0, 1.0, 1.0, 0.75)
 	gc.DrawRectangle(float64(trans.pWidth)-boxWidth, float64(trans.pHeight)-boxHeight, float64(trans.pWidth), boxHeight)
 	gc.Fill()
 	gc.SetRGBA(0.0, 0.0, 0.0, 0.5)
+
+	m.LoadCustomFontFace(gc)
+
 	gc.DrawString(m.tileProvider.Attribution, float64(m.width)-boxWidth+padding, float64(m.height)-padding)
 
 	return img, trans, nil
+}
+
+// LoadCustomFontFace set a custom font face with have any path configured
+func (m *Context) LoadCustomFontFace(dc *gg.Context) {
+	if m.customFontFace != "" {
+		if err := dc.LoadFontFace(m.customFontFace, float64(m.customFontFaceSize)); err != nil {
+			log.Printf("Missing custom font: %s", err)
+		}
+	}
 }
 
 // RenderWithBounds actually renders the map image including all map objects (markers, paths, areas).
