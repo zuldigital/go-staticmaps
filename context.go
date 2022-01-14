@@ -13,6 +13,7 @@ import (
 	"image/draw"
 	"log"
 	"math"
+	"sync"
 
 	"github.com/fogleman/gg"
 	"github.com/golang/geo/r2"
@@ -40,6 +41,7 @@ type Context struct {
 	overlays []*TileProvider
 
 	userAgent    string
+	online       bool
 	tileProvider *TileProvider
 	cache        TileCache
 
@@ -59,6 +61,7 @@ func NewContext() *Context {
 	t.hasBoundingBox = false
 	t.background = nil
 	t.userAgent = ""
+	t.online = true
 	t.tileProvider = NewTileProviderOpenStreetMaps()
 	t.cache = NewTileCacheFromUserCache(0777)
 	return t
@@ -72,6 +75,12 @@ func (m *Context) SetTileProvider(t *TileProvider) {
 // SetCache takes a nil argument to disable caching
 func (m *Context) SetCache(cache TileCache) {
 	m.cache = cache
+}
+
+// SetOnline enables/disables online
+// TileFetcher will only fetch tiles from cache if online = false
+func (m *Context) SetOnline(online bool) {
+	m.online = online
 }
 
 // SetUserAgent sets the HTTP user agent string used when downloading map tiles
@@ -644,40 +653,54 @@ func (m *Context) RenderWithBounds() (image.Image, s2.Rect, error) {
 }
 
 func (m *Context) renderLayer(gc *gg.Context, zoom int, trans *Transformer, tileSize int, provider *TileProvider) error {
-	t := NewTileFetcher(provider, m.cache)
+	var wg sync.WaitGroup
+	tiles := (1 << uint(zoom))
+	fetchedTiles := make(chan *Tile)
+	t := NewTileFetcher(provider, m.cache, m.online)
 	if m.userAgent != "" {
 		t.SetUserAgent(m.userAgent)
 	}
 
-	tiles := (1 << uint(zoom))
-	for xx := 0; xx < trans.tCountX; xx++ {
-		x := trans.tOriginX + xx
-		if x < 0 {
-			x = x + tiles
-		} else if x >= tiles {
-			x = x - tiles
-		}
-		if x < 0 || x >= tiles {
-			log.Printf("Skipping out of bounds tile column %d/?", x)
-			continue
-		}
-		for yy := 0; yy < trans.tCountY; yy++ {
-			y := trans.tOriginY + yy
-			if y < 0 || y >= tiles {
-				log.Printf("Skipping out of bounds tile %d/%d", x, y)
+	go func() {
+		for xx := 0; xx < trans.tCountX; xx++ {
+			x := trans.tOriginX + xx
+			if x < 0 {
+				x = x + tiles
+			} else if x >= tiles {
+				x = x - tiles
+			}
+			if x < 0 || x >= tiles {
+				log.Printf("Skipping out of bounds tile column %d/?", x)
 				continue
 			}
+			for yy := 0; yy < trans.tCountY; yy++ {
+				y := trans.tOriginY + yy
+				if y < 0 || y >= tiles {
+					log.Printf("Skipping out of bounds tile %d/%d", x, y)
+					continue
+				}
+				wg.Add(1)
+				tile := &Tile{Zoom: zoom, X: x, Y: y}
+				go func(wg *sync.WaitGroup, tile *Tile, xx, yy int) {
+					defer wg.Done()
+					if err := t.Fetch(tile); err == nil {
+						tile.X = xx * tileSize
+						tile.Y = yy * tileSize
+						fetchedTiles <- tile
+					} else if err == errTileNotFound && provider.IgnoreNotFound {
+						log.Printf("Error downloading tile file: %s (Ignored)", err)
+					} else {
+						log.Printf("Error downloading tile file: %s", err)
+					}
+				}(&wg, tile, xx, yy)
+			}
+		}
+		wg.Wait()
+		close(fetchedTiles)
+	}()
 
-			if tileImg, err := t.Fetch(zoom, x, y); err == nil {
-				gc.DrawImage(tileImg, xx*tileSize, yy*tileSize)
-			} else if err == errTileNotFound && provider.IgnoreNotFound {
-				log.Printf("Error downloading tile file: %s (Ignored)", err)
-				continue
-			} else {
-				log.Printf("Error downloading tile file: %s", err)
-				return err
-			}
-		}
+	for tile := range fetchedTiles {
+		gc.DrawImage(tile.Img, tile.X, tile.Y)
 	}
 
 	return nil
