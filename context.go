@@ -29,6 +29,8 @@ type Context struct {
 	hasZoom bool
 	zoom    int
 
+	scale int
+
 	hasCenter bool
 	center    s2.LatLng
 
@@ -56,6 +58,7 @@ func NewContext() *Context {
 	t := new(Context)
 	t.width = 512
 	t.height = 512
+	t.scale = 1
 	t.hasZoom = false
 	t.hasCenter = false
 	t.hasBoundingBox = false
@@ -98,6 +101,11 @@ func (m *Context) SetSize(width, height int) {
 func (m *Context) SetZoom(zoom int) {
 	m.zoom = zoom
 	m.hasZoom = true
+}
+
+// SetScale set scale to use HiDPI image when set to 2
+func (m *Context) SetScale(scale int) {
+	m.scale = scale
 }
 
 // SetCenter sets the center coordinates
@@ -512,6 +520,13 @@ func (t *Transformer) Rect() (bbox s2.Rect) {
 
 // Render actually renders the map image including all map objects (markers, paths, areas)
 func (m *Context) Render() (image.Image, error) {
+	// If scale is set to 2, we need to multiply the width, height and tile size
+	if m.scale > 1 {
+		m.width = m.width * m.scale
+		m.height = m.height * m.scale
+		m.tileProvider.TileSize = m.tileProvider.TileSize * m.scale
+	}
+
 	zoom, center, err := m.determineZoomCenter()
 	if err != nil {
 		return nil, err
@@ -532,7 +547,7 @@ func (m *Context) Render() (image.Image, error) {
 	}
 
 	for _, layer := range layers {
-		if err := m.renderLayer(gc, zoom, trans, tileSize, layer); err != nil {
+		if err := m.renderLayer(gc, m.scale, zoom, trans, tileSize, layer); err != nil {
 			return nil, err
 		}
 	}
@@ -599,7 +614,7 @@ func (m *Context) RenderWithTransformer() (image.Image, *Transformer, error) {
 	}
 
 	for _, layer := range layers {
-		if err := m.renderLayer(gc, zoom, trans, tileSize, layer); err != nil {
+		if err := m.renderLayer(gc, m.scale, zoom, trans, tileSize, layer); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -652,7 +667,7 @@ func (m *Context) RenderWithBounds() (image.Image, s2.Rect, error) {
 	return img, trans.Rect(), nil
 }
 
-func (m *Context) renderLayer(gc *gg.Context, zoom int, trans *Transformer, tileSize int, provider *TileProvider) error {
+func (m *Context) renderLayer(gc *gg.Context, scale int, zoom int, trans *Transformer, tileSize int, provider *TileProvider) error {
 	var wg sync.WaitGroup
 	tiles := (1 << uint(zoom))
 	fetchedTiles := make(chan *Tile)
@@ -680,7 +695,7 @@ func (m *Context) renderLayer(gc *gg.Context, zoom int, trans *Transformer, tile
 					continue
 				}
 				wg.Add(1)
-				tile := &Tile{Zoom: zoom, X: x, Y: y}
+				tile := &Tile{Scale: scale, Zoom: zoom, X: x, Y: y}
 				go func(wg *sync.WaitGroup, tile *Tile, xx, yy int) {
 					defer wg.Done()
 					if err := t.Fetch(tile); err == nil {

@@ -5,7 +5,10 @@
 
 package sm
 
-import "fmt"
+import (
+	"fmt"
+	"log"
+)
 
 // TileProvider encapsulates all infos about a map tile provider service (name, url scheme, attribution, etc.)
 type TileProvider struct {
@@ -13,12 +16,21 @@ type TileProvider struct {
 	Attribution    string
 	IgnoreNotFound bool
 	TileSize       int
-	URLPattern     string // "%[1]s" => shard, "%[2]d" => zoom, "%[3]d" => x, "%[4]d" => y
+	URLPattern     string // "%[1]s" => shard, "%[2]d" => zoom, "%[3]d" => x, "%[4]d" => y, if support HiDPI image need to add "%[5]s" => scale
 	Shards         []string
+	SupportHiDPI   bool
 }
 
-func (t *TileProvider) getURL(shard string, zoom, x, y int) string {
-	return fmt.Sprintf(t.URLPattern, shard, zoom, x, y)
+func (t *TileProvider) getURL(shard string, zoom, x, y, scale int) string {
+	if t.SupportHiDPI && scale == 2 {
+		return fmt.Sprintf(t.URLPattern, shard, zoom, x, y, "@2x")
+	}
+
+	if !t.SupportHiDPI && scale == 2 {
+		log.Printf("The provider %s didn't support HiDPI image and will return no HiDPI image.", t.Name)
+	}
+
+	return fmt.Sprintf(t.URLPattern, shard, zoom, x, y, "")
 }
 
 // NewTileProviderOpenStreetMaps creates a TileProvider struct for OSM's tile service
@@ -27,8 +39,9 @@ func NewTileProviderOpenStreetMaps() *TileProvider {
 	t.Name = "osm"
 	t.Attribution = "Maps and Data (c) openstreetmap.org and contributors, ODbL"
 	t.TileSize = 256
-	t.URLPattern = "http://%[1]s.tile.openstreetmap.org/%[2]d/%[3]d/%[4]d.png"
+	t.URLPattern = "http://%[1]s.tile.openstreetmap.org/%[2]d/%[3]d/%[4]d%[5]s.png"
 	t.Shards = []string{"a", "b", "c"}
+	t.SupportHiDPI = true
 	return t
 }
 
@@ -39,6 +52,7 @@ func newTileProviderThunderforest(name string) *TileProvider {
 	t.TileSize = 256
 	t.URLPattern = "https://%[1]s.tile.thunderforest.com/" + name + "/%[2]d/%[3]d/%[4]d.png"
 	t.Shards = []string{"a", "b", "c"}
+	t.SupportHiDPI = false
 	return t
 }
 
@@ -63,8 +77,9 @@ func NewTileProviderStamenToner() *TileProvider {
 	t.Name = "stamen-toner"
 	t.Attribution = "Maps (c) Stamen; Data (c) OSM and contributors, ODbL"
 	t.TileSize = 256
-	t.URLPattern = "http://%[1]s.tile.stamen.com/toner/%[2]d/%[3]d/%[4]d.png"
+	t.URLPattern = "http://%[1]s.tile.stamen.com/toner/%[2]d/%[3]d/%[4]d%.png"
 	t.Shards = []string{"a", "b", "c", "d"}
+	t.SupportHiDPI = false
 	return t
 }
 
@@ -74,8 +89,9 @@ func NewTileProviderStamenTerrain() *TileProvider {
 	t.Name = "stamen-terrain"
 	t.Attribution = "Maps (c) Stamen; Data (c) OSM and contributors, ODbL"
 	t.TileSize = 256
-	t.URLPattern = "http://%[1]s.tile.stamen.com/terrain/%[2]d/%[3]d/%[4]d.png"
+	t.URLPattern = "http://%[1]s.tile.stamen.com/terrain/%[2]d/%[3]d/%[4]d%.png"
 	t.Shards = []string{"a", "b", "c", "d"}
+	t.SupportHiDPI = false
 	return t
 }
 
@@ -87,6 +103,7 @@ func NewTileProviderOpenTopoMap() *TileProvider {
 	t.TileSize = 256
 	t.URLPattern = "http://%[1]s.tile.opentopomap.org/%[2]d/%[3]d/%[4]d.png"
 	t.Shards = []string{"a", "b", "c"}
+	t.SupportHiDPI = false
 	return t
 }
 
@@ -96,8 +113,9 @@ func NewTileProviderWikimedia() *TileProvider {
 	t.Name = "wikimedia"
 	t.Attribution = "Map (c) Wikimedia; Data (c) OSM and contributors, ODbL."
 	t.TileSize = 256
-	t.URLPattern = "https://maps.wikimedia.org/osm-intl/%[2]d/%[3]d/%[4]d.png"
+	t.URLPattern = "https://maps.wikimedia.org/osm-intl/%[2]d/%[3]d/%[4]d%.png"
 	t.Shards = []string{}
+	t.SupportHiDPI = false
 	return t
 }
 
@@ -107,8 +125,9 @@ func NewTileProviderOpenCycleMap() *TileProvider {
 	t.Name = "cycle"
 	t.Attribution = "Maps and Data (c) openstreetmaps.org and contributors, ODbL"
 	t.TileSize = 256
-	t.URLPattern = "http://%[1]s.tile.opencyclemap.org/cycle/%[2]d/%[3]d/%[4]d.png"
+	t.URLPattern = "http://%[1]s.tile.opencyclemap.org/cycle/%[2]d/%[3]d/%[4]d%.png"
 	t.Shards = []string{"a", "b"}
+	t.SupportHiDPI = false
 	return t
 }
 
@@ -117,8 +136,9 @@ func newTileProviderCarto(name string) *TileProvider {
 	t.Name = fmt.Sprintf("carto-%s", name)
 	t.Attribution = "Map (c) Carto [CC BY 3.0] Data (c) OSM and contributors, ODbL."
 	t.TileSize = 256
-	t.URLPattern = "https://cartodb-basemaps-%[1]s.global.ssl.fastly.net/" + name + "_all/%[2]d/%[3]d/%[4]d.png"
+	t.URLPattern = "https://cartodb-basemaps-%[1]s.global.ssl.fastly.net/" + name + "_all/%[2]d/%[3]d/%[4]d%.png"
 	t.Shards = []string{"a", "b", "c", "d"}
+	t.SupportHiDPI = false
 	return t
 }
 
@@ -140,6 +160,7 @@ func NewTileProviderArcgisWorldImagery() *TileProvider {
 	t.TileSize = 256
 	t.URLPattern = "https://server.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/%[2]d/%[4]d/%[3]d"
 	t.Shards = []string{}
+	t.SupportHiDPI = false
 	return t
 }
 
