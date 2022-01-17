@@ -34,8 +34,8 @@ type TileFetcher struct {
 
 // Tile defines a single map tile
 type Tile struct {
-	Img        image.Image
-	X, Y, Zoom int
+	Img               image.Image
+	X, Y, Zoom, Scale int
 }
 
 // NewTileFetcher creates a new Tilefetcher struct
@@ -53,19 +53,20 @@ func (t *TileFetcher) SetUserAgent(a string) {
 	t.userAgent = a
 }
 
-func (t *TileFetcher) url(zoom, x, y int) string {
+func (t *TileFetcher) url(zoom, x, y, scale int) string {
 	shard := ""
 	ss := len(t.tileProvider.Shards)
 	if len(t.tileProvider.Shards) > 0 {
 		shard = t.tileProvider.Shards[(x+y)%ss]
 	}
-	return t.tileProvider.getURL(shard, zoom, x, y)
+	return t.tileProvider.getURL(shard, zoom, x, y, scale)
 }
 
-func cacheFileName(cache TileCache, providerName string, zoom, x, y int) string {
+func cacheFileName(cache TileCache, providerName string, scale, zoom, x, y int) string {
 	return path.Join(
 		cache.Path(),
 		providerName,
+		strconv.Itoa(scale),
 		strconv.Itoa(zoom),
 		strconv.Itoa(x),
 		strconv.Itoa(y),
@@ -75,7 +76,7 @@ func cacheFileName(cache TileCache, providerName string, zoom, x, y int) string 
 // Fetch download (or retrieves from the cache) a tile image for the specified zoom level and tile coordinates
 func (t *TileFetcher) Fetch(tile *Tile) error {
 	if t.cache != nil {
-		fileName := cacheFileName(t.cache, t.tileProvider.Name, tile.Zoom, tile.X, tile.Y)
+		fileName := cacheFileName(t.cache, t.tileProvider.Name, tile.Scale, tile.Zoom, tile.X, tile.Y)
 		cachedImg, err := t.loadCache(fileName)
 		if err == nil {
 			tile.Img = cachedImg
@@ -87,7 +88,7 @@ func (t *TileFetcher) Fetch(tile *Tile) error {
 		return errTileNotFound
 	}
 
-	url := t.url(tile.Zoom, tile.X, tile.Y)
+	url := t.url(tile.Zoom, tile.X, tile.Y, tile.Scale)
 	data, err := t.download(url)
 	if err != nil {
 		return err
@@ -99,7 +100,7 @@ func (t *TileFetcher) Fetch(tile *Tile) error {
 	}
 
 	if t.cache != nil {
-		fileName := cacheFileName(t.cache, t.tileProvider.Name, tile.Zoom, tile.X, tile.Y)
+		fileName := cacheFileName(t.cache, t.tileProvider.Name, tile.Scale, tile.Zoom, tile.X, tile.Y)
 		if err := t.storeCache(fileName, data); err != nil {
 			log.Printf("Failed to store map tile as '%s': %s", fileName, err)
 		}
